@@ -1,0 +1,701 @@
+import java_cup.runtime.Symbol;
+import java.util.*;
+import visitor.*;
+import syntaxtree.*;
+
+/* Preliminaries to use the scanner.  */
+scan with {: return lexer.next_token(); :};
+
+parser code {: 
+  ExprLex lexer;
+  /* 
+    Contains the progam
+  */
+  public Program program;
+
+  public boolean hasError = false;
+  
+
+  public ExprParser(ExprLex lex) {
+      super(lex);
+      lexer = lex; 
+  }
+
+
+  public void syntax_error(Symbol cur_token){
+    hasError = true;
+    System.out.println("Parse error at line "+cur_token.left+", column "+cur_token.right);
+  }
+
+
+
+
+  /* 
+    Returns the progam field wich contains 
+    a representation of the AST
+  */
+  public Program getProgram(){
+     return program;
+  }
+:}; 
+
+/*
+  Terminals (tokens returned by lexer). 
+*/
+terminal PLUS;  // "+"
+terminal LPAREN;  // "("
+terminal RPAREN; // ")"
+terminal CLASS; // "class"
+terminal LBRACE; // "{"
+terminal RBRACE; // "}"
+terminal PUBLIC; // "public"
+terminal STATIC; // "static"
+terminal VOID; // "void"
+terminal MAIN; // "main"
+terminal STRING; // "String"
+terminal LBRACKET; // "["
+terminal RBRACKET; // "]"
+terminal EXTENDS; // "extends"
+terminal SEMICOLON; // ";"
+terminal RETURN; // "return"
+terminal COMMA; // ","
+terminal INT; // "int"
+terminal BOOLEAN; // "boolean"
+terminal IF; // "if"
+terminal ELSE; // "else"
+terminal WHILE; // "while"
+terminal PRINT; // "System.out.println"
+terminal ASSIGN; // "="
+terminal AND; // "&&"
+terminal LESSTHAN; // "<"
+terminal MINUS; // "-"
+terminal MULTIPY; // "*"
+terminal DOT; // "."
+terminal LENGTH; // "length"
+terminal TRUE; // "true"
+terminal FALSE; // "false"
+terminal THIS; // "this"
+terminal NEW; // "new"
+terminal NOT; // "!"
+terminal IDENTIFIER; // "!"
+terminal INTEGER_LITERAL; // "!"
+
+
+/* 
+  Non Terminals 
+*/
+non terminal line_list;
+non terminal exp;
+non terminal mainclass;
+non terminal stament_list;
+non terminal stament;
+non terminal arrayassign,exp_list;
+non terminal identifier;
+non terminal assign;
+non terminal print;
+non terminal block;
+non terminal if;
+non terminal while;
+non terminal classdecl_list;
+non terminal classdecl;
+non terminal methoddecl_list;
+non terminal methoddecl;
+non terminal vardecl_list;
+non terminal vardecl;
+non terminal type;
+non terminal formal_list,formal;
+
+/* 
+  Precedence rules for the grammar
+*/
+precedence left AND;
+precedence left MINUS;
+precedence left PLUS;
+precedence left MULTIPY;
+precedence nonassoc LESSTHAN;
+precedence right NOT;
+precedence right ELSE;
+precedence nonassoc ASSIGN;
+precedence right DOT;
+
+
+
+
+
+/* 
+  Start symbol
+*/
+start with line_list;
+
+
+line_list ::= mainclass:mainclass_obj
+  {:
+    MainClass mainClass = (MainClass) mainclass_obj;
+    program = new Program(mainClass,new ClassDeclList());
+  :}
+	|
+  mainclass:mainclass_obj classdecl_list:classdecl_list_obj
+  {:
+    MainClass mainClass = (MainClass) mainclass_obj;
+    ClassDeclList classDeclList = (ClassDeclList) classdecl_list_obj;
+    program = new Program(mainClass,classDeclList);
+  :}
+	;
+
+mainclass ::= CLASS identifier:id_obj_1 LBRACE PUBLIC STATIC VOID MAIN LPAREN STRING LBRACKET RBRACKET identifier:id_obj_2 RPAREN LBRACE stament:stament_obj RBRACE  RBRACE
+          {:
+            
+            Identifier idOne = (Identifier) id_obj_1;
+            Identifier idTwo = (Identifier) id_obj_2;
+            Statement stament = (Statement) stament_obj;
+            RESULT = new MainClass(idOne,idTwo,stament);
+          :}  
+          |
+          error RBRACE  RBRACE
+;
+
+/* 
+  ClassDecl grammar
+*/
+
+classdecl_list ::= classdecl_list:classdecl_list_obj classdecl:classdecl_obj
+              {:
+                ClassDecl classDecl = (ClassDecl) classdecl_obj;
+                ClassDeclList classDeclList = (ClassDeclList) classdecl_list_obj;
+                classDeclList.addElement(classDecl);
+                RESULT = classDeclList;
+              :}
+              |
+              classdecl:classdecl_obj
+              {:
+                 ClassDecl classDecl = (ClassDecl) classdecl_obj;
+                 ClassDeclList classDeclList = new ClassDeclList();
+                 classDeclList.addElement(classDecl);
+                 RESULT = classDeclList;
+              :}
+;
+
+
+classdecl ::= CLASS identifier:id_obj LBRACE RBRACE
+          {:
+            Identifier id = (Identifier) id_obj;
+            RESULT = new ClassDeclSimple(id,new VarDeclList(),new MethodDeclList());
+          :}
+          |
+          CLASS identifier:id_obj LBRACE vardecl_list:vardecl_list_obj RBRACE 
+          {:
+            Identifier id = (Identifier) id_obj;
+            VarDeclList varDeclList = (VarDeclList) vardecl_list_obj;
+            RESULT = new ClassDeclSimple(id,varDeclList,new MethodDeclList());
+          :}
+          |
+          CLASS identifier:id_obj LBRACE methoddecl_list:methoddecl_list_obj RBRACE 
+          {:
+            Identifier id = (Identifier) id_obj;
+            MethodDeclList methodDeclList = (MethodDeclList) methoddecl_list_obj;
+            RESULT = new ClassDeclSimple(id,new VarDeclList(),methodDeclList);
+          :}
+          |
+          CLASS identifier:id_obj LBRACE vardecl_list:vardecl_list_obj methoddecl_list:methoddecl_list_obj RBRACE
+          {:
+            Identifier id = (Identifier) id_obj;
+            VarDeclList varDeclList = (VarDeclList) vardecl_list_obj;
+            MethodDeclList methodDeclList = (MethodDeclList) methoddecl_list_obj;
+            RESULT = new ClassDeclSimple(id,varDeclList,methodDeclList);
+          :}
+          |
+          /*
+            extends classes
+          */
+          CLASS identifier:id_obj_1 EXTENDS identifier:id_obj_2 LBRACE RBRACE
+          {:
+            Identifier idOne = (Identifier) id_obj_1;
+            Identifier idTwo = (Identifier) id_obj_2;
+            RESULT = new ClassDeclExtends(idOne,idTwo,new VarDeclList(),new MethodDeclList());
+          :}
+          |
+          CLASS identifier:id_obj_1 EXTENDS identifier:id_obj_2 LBRACE vardecl_list:vardecl_list_obj RBRACE 
+          {:
+            Identifier idOne = (Identifier) id_obj_1;
+            Identifier idTwo = (Identifier) id_obj_2;
+            VarDeclList varDeclList = (VarDeclList) vardecl_list_obj;
+            RESULT = new ClassDeclExtends(idOne,idTwo,varDeclList,new MethodDeclList());
+          :}
+          |
+          CLASS identifier:id_obj_1 EXTENDS identifier:id_obj_2 LBRACE methoddecl_list:methoddecl_list_obj RBRACE 
+          {:
+            Identifier idOne = (Identifier) id_obj_1;
+            Identifier idTwo = (Identifier) id_obj_2;
+            MethodDeclList methodDeclList = (MethodDeclList) methoddecl_list_obj;
+            RESULT = new ClassDeclExtends(idOne,idTwo,new VarDeclList(),methodDeclList);
+          :}
+          |
+          CLASS identifier:id_obj_1 EXTENDS identifier:id_obj_2 LBRACE vardecl_list:vardecl_list_obj methoddecl_list:methoddecl_list_obj RBRACE
+          {:
+            Identifier idOne = (Identifier) id_obj_1;
+            Identifier idTwo = (Identifier) id_obj_2;
+            VarDeclList varDeclList = (VarDeclList) vardecl_list_obj;
+            MethodDeclList methodDeclList = (MethodDeclList) methoddecl_list_obj;
+            RESULT = new ClassDeclExtends(idOne,idTwo,varDeclList,methodDeclList);
+          :}
+          | 
+          error RBRACE
+          
+           
+;
+
+/*  
+  MethodDecl grammar
+*/
+methoddecl_list ::= methoddecl_list:methoddecl_list_obj methoddecl:methoddecl_obj
+          {:
+            MethodDecl methodDecl = (MethodDecl) methoddecl_obj;
+            MethodDeclList methodDeclList = (MethodDeclList) methoddecl_list_obj;
+            methodDeclList.addElement(methodDecl);
+            RESULT = methodDeclList; 
+          :}
+          | 
+          methoddecl:methoddecl_obj
+          {:
+            MethodDecl methodDecl = (MethodDecl) methoddecl_obj;
+            MethodDeclList methodDeclList = new MethodDeclList();
+            methodDeclList.addElement(methodDecl);
+            RESULT = methodDeclList; 
+          :}
+;
+
+methoddecl ::= PUBLIC type:type_obj identifier:id_obj LPAREN RPAREN LBRACE RETURN exp:exp_obj SEMICOLON RBRACE
+          {:
+            Type type = (Type) type_obj;
+            Identifier id = (Identifier) id_obj;
+            Exp exp = (Exp) exp_obj;
+            RESULT = new MethodDecl(type,id,new FormalList(),new VarDeclList(),new StatementList(),exp);
+          :}
+          |
+          PUBLIC type:type_obj identifier:id_obj LPAREN RPAREN LBRACE stament_list:stament_list_obj RETURN exp:exp_obj SEMICOLON RBRACE
+          {:
+            Type type = (Type) type_obj;
+            Identifier id = (Identifier) id_obj;
+            StatementList statementList = (StatementList) stament_list_obj;
+            Exp exp = (Exp) exp_obj;
+            RESULT = new MethodDecl(type,id,new FormalList(),new VarDeclList(),statementList,exp);
+          :}
+          |
+          PUBLIC type:type_obj identifier:id_obj LPAREN RPAREN LBRACE vardecl_list:vardecl_list_obj RETURN exp:exp_obj SEMICOLON RBRACE
+          {:
+            Type type = (Type) type_obj;
+            Identifier id = (Identifier) id_obj;
+            VarDeclList varDeclList = (VarDeclList) vardecl_list_obj;
+            Exp exp = (Exp) exp_obj;
+            RESULT = new MethodDecl(type,id,new FormalList(),varDeclList,new StatementList(),exp);
+          :}
+          |
+          PUBLIC type:type_obj identifier:id_obj LPAREN RPAREN LBRACE vardecl_list:vardecl_list_obj stament_list:stament_list_obj RETURN exp:exp_obj SEMICOLON RBRACE
+          {:
+            Type type = (Type) type_obj;
+            Identifier id = (Identifier) id_obj;
+            VarDeclList varDeclList = (VarDeclList) vardecl_list_obj;
+            StatementList statementList = (StatementList) stament_list_obj;
+            Exp exp = (Exp) exp_obj;
+            RESULT = new MethodDecl(type,id,new FormalList(),varDeclList,statementList,exp);
+          :}
+          |
+          PUBLIC type:type_obj identifier:id_obj LPAREN formal_list:formal_list_obj RPAREN LBRACE  RETURN exp:exp_obj SEMICOLON RBRACE
+          {:
+            Type type = (Type) type_obj;
+            Identifier id = (Identifier) id_obj;
+            FormalList formalList = (FormalList) formal_list_obj;
+            Exp exp = (Exp) exp_obj;
+            RESULT = new MethodDecl(type,id,formalList,new VarDeclList(),new StatementList(),exp);
+          :}
+          |
+          PUBLIC type:type_obj identifier:id_obj LPAREN formal_list:formal_list_obj RPAREN LBRACE stament_list:stament_list_obj RETURN exp:exp_obj SEMICOLON RBRACE
+          {:
+            Type type = (Type) type_obj;
+            Identifier id = (Identifier) id_obj;
+            FormalList formalList = (FormalList) formal_list_obj;
+            StatementList statementList = (StatementList) stament_list_obj;
+            Exp exp = (Exp) exp_obj;
+            RESULT = new MethodDecl(type,id,formalList,new VarDeclList(),statementList,exp);
+          :}
+          |
+          PUBLIC type:type_obj identifier:id_obj LPAREN formal_list:formal_list_obj RPAREN LBRACE vardecl_list:vardecl_list_obj RETURN exp:exp_obj SEMICOLON RBRACE
+          {:
+            Type type = (Type) type_obj;
+            Identifier id = (Identifier) id_obj;
+            FormalList formalList = (FormalList) formal_list_obj;
+            VarDeclList varDeclList = (VarDeclList) vardecl_list_obj;
+            Exp exp = (Exp) exp_obj;
+            RESULT = new MethodDecl(type,id,formalList,varDeclList,new StatementList() ,exp);
+          :}
+          |
+          PUBLIC type:type_obj identifier:id_obj LPAREN formal_list:formal_list_obj RPAREN LBRACE vardecl_list:vardecl_list_obj stament_list:stament_list_obj RETURN exp:exp_obj SEMICOLON RBRACE
+          {:
+            Type type = (Type) type_obj;
+            Identifier id = (Identifier) id_obj;
+            FormalList formalList = (FormalList) formal_list_obj;
+            VarDeclList varDeclList = (VarDeclList) vardecl_list_obj;
+            StatementList statementList = (StatementList) stament_list_obj;
+            Exp exp = (Exp) exp_obj;
+            RESULT = new MethodDecl(type,id,formalList,varDeclList,statementList,exp);
+          :}
+          |
+          error RBRACE
+          |
+          PUBLIC type:type_obj identifier:id_obj LPAREN error RPAREN LBRACE vardecl_list:vardecl_list_obj stament_list:stament_list_obj RETURN exp:exp_obj SEMICOLON RBRACE
+          
+
+;
+
+/*
+  Formal grammar
+*/  
+formal_list ::= formal_list:formal_list_obj COMMA formal:formal_obj
+      {:
+        Formal formal = (Formal) formal_obj;
+        FormalList formalList = (FormalList) formal_list_obj;
+        formalList.addElement(formal);
+        RESULT = formalList;
+      :}
+      |  
+      formal:formal_obj
+      {:
+        Formal formal = (Formal) formal_obj;
+        FormalList formalList = new FormalList();
+        formalList.addElement(formal);
+        RESULT = formalList;
+      :}
+;
+
+formal ::= type:type_obj identifier:id_obj
+      {:
+        Type type = (Type) type_obj;
+        Identifier id = (Identifier) id_obj;
+        RESULT = new Formal(type,id);
+      :}
+      
+;
+
+/* 
+  VarDecl grammar
+*/
+
+vardecl_list ::= vardecl_list:vardecl_list_obj vardecl:vardecl_obj
+      {:
+        VarDeclList varDeclList = (VarDeclList) vardecl_list_obj;
+        VarDecl varDecl = (VarDecl) vardecl_obj;
+        varDeclList.addElement(varDecl);
+        RESULT = varDeclList;
+      :}
+      | 
+      vardecl:vardecl_obj
+      {:
+        VarDeclList varDeclList = new VarDeclList();
+        VarDecl varDecl = (VarDecl) vardecl_obj;
+        varDeclList.addElement(varDecl);
+        RESULT = varDeclList;
+      :}
+
+;
+
+vardecl ::= type:type_obj identifier:id_obj SEMICOLON
+      {:
+        Type type = (Type) type_obj;
+        Identifier id = (Identifier) id_obj;
+        RESULT = new VarDecl(type,id);
+      :}
+      |
+      error identifier SEMICOLON
+      |
+      type error SEMICOLON
+; 
+
+/*
+  type grammar
+*/
+
+type ::= INT 
+      {: RESULT = new IntegerType(); :}
+      |
+      BOOLEAN
+      {: RESULT = new BooleanType(); :}
+      |
+      INT LBRACKET RBRACKET
+      {: RESULT = new IntArrayType(); :}
+      |
+      IDENTIFIER:line_tracker_obj
+      {:  
+        LineTracker l = (LineTracker) line_tracker_obj;
+        String id = (String) l.getVal();
+        RESULT = new IdentifierType(id);
+      :}
+;
+
+/*
+  Stament grammar
+*/
+
+stament_list ::= stament_list:stament_list_obj stament:stament_obj
+    {:
+      StatementList stamentList = (StatementList) stament_list_obj;
+      Statement stament = (Statement) stament_obj;
+      stamentList.addElement(stament);
+      RESULT = stamentList;
+    :}
+    | 
+    stament:stament_obj
+    {:
+      StatementList stamentList = new StatementList();
+      Statement stament = (Statement) stament_obj;
+      stamentList.addElement(stament);
+      RESULT = stamentList;
+    :}
+;
+
+stament ::=  arrayassign:stament_obj
+    {: RESULT = (Statement) stament_obj;  :}
+    |
+    assign:stament_obj
+    {: RESULT = (Statement) stament_obj;  :}
+    |
+    print:stament_obj
+    {: RESULT = (Statement) stament_obj;  :}
+    |
+    block:stament_obj
+    {: RESULT = (Statement) stament_obj;  :}
+    |
+    if:stament_obj
+    {: RESULT = (Statement) stament_obj;  :}
+    |
+    while:stament_obj
+    {: RESULT = (Statement) stament_obj;  :}
+    |
+    error SEMICOLON
+    ;
+
+// ArrayAssign
+arrayassign ::=  identifier:id_obj LBRACKET exp:exp_obj_1 RBRACKET ASSIGN:line_tracker_obj exp:exp_obj_2 SEMICOLON
+    {:
+      LineTracker l = (LineTracker) line_tracker_obj;
+      Identifier id = (Identifier) id_obj;
+      Exp expOne = (Exp) exp_obj_1;
+      Exp expTwo = (Exp) exp_obj_2;
+      RESULT = new ArrayAssign(id,expOne,expTwo,l.getRow(),l.getCol());
+    :}
+;
+
+// Assign
+assign ::= identifier:id_obj ASSIGN:line_tracker_obj exp:exp_obj SEMICOLON
+    {:
+      LineTracker l = (LineTracker) line_tracker_obj;
+      Identifier id = (Identifier) id_obj;
+      Exp exp = (Exp) exp_obj;
+      RESULT = new Assign(id,exp,l.getRow(),l.getCol());
+    :}
+;
+
+// Print
+print ::= PRINT LPAREN exp:exp_obj RPAREN SEMICOLON
+    {:
+      Exp exp = (Exp) exp_obj;
+      RESULT = new Print(exp);
+    :}
+;
+
+// Block
+block ::= LBRACE stament_list:stament_list_obj RBRACE
+    {:
+      StatementList stamentList = (StatementList) stament_list_obj;
+      RESULT = new Block(stamentList);
+    :}
+    |
+    LBRACE RBRACE
+    {:
+      RESULT = new Block(new StatementList());
+    :}
+;
+
+// If
+if ::= IF LPAREN:line_tracker_obj exp:exp_obj RPAREN stament:stament_obj_1 ELSE stament:stament_obj_2
+   {:
+      LineTracker l = (LineTracker) line_tracker_obj;
+      Exp exp = (Exp) exp_obj;
+      Statement stamentOne = (Statement) stament_obj_1;
+      Statement stamentTwo = (Statement) stament_obj_2;
+      RESULT = new If(exp,stamentOne,stamentTwo,l.getRow(),l.getCol());
+   :}
+; 
+
+// While
+while ::= WHILE LPAREN:line_tracker_obj exp:exp_obj RPAREN stament:stament_obj
+    {:
+      LineTracker l = (LineTracker) line_tracker_obj;
+      Exp exp = (Exp) exp_obj;
+      Statement stament = (Statement) stament_obj;
+      RESULT = new While(exp,stament,l.getRow(),l.getCol());
+    :}
+;
+
+
+/* 
+  Expressions grammar
+*/
+exp_list ::= exp_list:exp_list_obj COMMA exp:exp_obj
+      {:
+        ExpList expList = (ExpList) exp_list_obj;
+        Exp exp = (Exp) exp_obj;
+        expList.addElement(exp);
+        RESULT = expList;
+      :}
+      | 
+      exp:exp_obj
+      {:
+        Exp exp = (Exp) exp_obj;
+        ExpList expList = new ExpList();
+        expList.addElement(exp);
+        RESULT = expList;
+      :}
+;
+
+exp ::= exp:exp_obj_1 AND:line_tracker_obj exp:exp_obj_2
+  {:
+    LineTracker l = (LineTracker) line_tracker_obj;
+    Exp exp1 = (Exp) exp_obj_1;
+    Exp exp2 = (Exp) exp_obj_2;
+    RESULT = new And(exp1,exp2,l.getRow(),l.getCol());
+  :}
+  |
+  exp:exp_obj_1 MINUS:line_tracker_obj exp:exp_obj_2
+  {:
+    LineTracker l = (LineTracker) line_tracker_obj;
+    Exp exp1 = (Exp) exp_obj_1;
+    Exp exp2 = (Exp) exp_obj_2;
+    RESULT = new Minus(exp1,exp2,l.getRow(),l.getCol());
+  :}
+  |
+  exp:exp_obj_1 PLUS:line_tracker_obj exp:exp_obj_2
+  {:
+    LineTracker l = (LineTracker) line_tracker_obj;
+    Exp exp1 = (Exp) exp_obj_1;
+    Exp exp2 = (Exp) exp_obj_2;
+    RESULT = new Plus(exp1,exp2,l.getRow(),l.getCol());
+  :}
+  |
+  exp:exp_obj_1 MULTIPY:line_tracker_obj exp:exp_obj_2
+  {:
+    LineTracker l = (LineTracker) line_tracker_obj;
+    Exp exp1 = (Exp) exp_obj_1;
+    Exp exp2 = (Exp) exp_obj_2;
+    RESULT = new Times(exp1,exp2,l.getRow(),l.getCol());
+  :}
+  | 
+  exp:exp_obj_1 LESSTHAN:line_tracker_obj exp:exp_obj_2
+  {:
+    LineTracker l = (LineTracker) line_tracker_obj;
+    Exp exp1 = (Exp) exp_obj_1;
+    Exp exp2 = (Exp) exp_obj_2;
+    RESULT = new LessThan(exp1,exp2,l.getRow(),l.getCol());
+  :}
+  |
+  exp:exp_obj_1 LBRACKET exp:exp_obj_2 RBRACKET                         // ArrayLookUp
+  {:
+    Exp exp1 = (Exp) exp_obj_1;
+    Exp exp2 = (Exp) exp_obj_2;
+    RESULT = new ArrayLookup(exp1,exp2);
+  :}
+  |
+  exp:exp_obj DOT:line_tracker_obj LENGTH                                    // ArrayLength
+  {:
+    LineTracker l = (LineTracker) line_tracker_obj;
+    Exp exp = (Exp) exp_obj;
+    RESULT = new ArrayLength(exp,l.getRow(),l.getCol());
+  :}
+  |
+  exp:exp_obj DOT:line_tracker_obj identifier:id_obj LPAREN error RPAREN    
+  |
+  exp:exp_obj DOT:line_tracker_obj identifier:id_obj LPAREN exp_list:exp_list_obj RPAREN         // Call 
+  {:
+    LineTracker l = (LineTracker) line_tracker_obj;
+    Exp exp = (Exp) exp_obj;
+    Identifier id = (Identifier) id_obj;
+    ExpList expList = (ExpList) exp_list_obj;
+    RESULT = new Call(exp,id,expList,l.getRow(),l.getCol());
+  :}
+  |
+  exp:exp_obj DOT:line_tracker_obj identifier:id_obj LPAREN RPAREN                  // Call 
+  {:
+    LineTracker l = (LineTracker) line_tracker_obj;
+    Exp exp = (Exp) exp_obj;
+    Identifier id = (Identifier) id_obj;
+    RESULT = new Call(exp,id,new ExpList(),l.getRow(),l.getCol());
+  :}
+  |
+  NEW INT LBRACKET exp:exp_obj RBRACKET            // NewArray  
+  {:
+    Exp exp = (Exp) exp_obj;
+    RESULT = new NewArray(exp);
+  :}
+  |
+  NEW identifier:id_obj LPAREN RPAREN             // NewObject
+  {:
+    Identifier id = (Identifier) id_obj;
+    RESULT = new NewObject(id);
+  :}
+  |
+  LPAREN exp:exp_obj RPAREN
+  {:
+    Exp exp = (Exp) exp_obj;
+    RESULT = exp;
+  :}
+  |
+  NOT:line_tracker_obj exp:exp_obj
+  {:
+    LineTracker l = (LineTracker) line_tracker_obj;
+    Exp exp = (Exp) exp_obj;
+    RESULT = new Not(exp,l.getRow(),l.getCol());
+  :} 
+  |
+  INTEGER_LITERAL:line_tracker_obj
+  {:
+    LineTracker l = (LineTracker) line_tracker_obj;
+    int intVal = (Integer) l.getVal();
+    RESULT = new IntegerLiteral(intVal,l.getRow(),l.getCol());
+  :}
+  |
+  MINUS INTEGER_LITERAL:line_tracker_obj
+  {:
+    LineTracker l = (LineTracker) line_tracker_obj;
+    int intVal = (Integer) l.getVal();
+    RESULT = new IntegerLiteral(-1*intVal,l.getRow(),l.getCol());
+  :}
+  |
+  IDENTIFIER:line_tracker_obj
+  {:
+    LineTracker l = (LineTracker) line_tracker_obj;
+    String id = (String) l.getVal();
+    RESULT = new IdentifierExp(id);
+  :}
+  | 
+  TRUE
+  {: RESULT = new True(); :}
+  |
+  FALSE
+  {: RESULT = new False(); :}
+  | 
+  THIS:line_tracker_obj
+  {:  
+      LineTracker l = (LineTracker) line_tracker_obj;
+      RESULT = new This(l.getRow(),l.getCol());  
+  :}
+;
+
+/* 
+  Identifier
+*/
+identifier ::= IDENTIFIER:line_tracker_obj
+    {:
+      LineTracker l = (LineTracker) line_tracker_obj;
+      String id = (String) l.getVal();
+      RESULT = new Identifier(id,l.getRow(),l.getCol());
+    :}
+;
